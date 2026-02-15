@@ -26,42 +26,57 @@ export default function Home() {
   );
 
   const [active, setActive] = useState("agenda");
+
+  // Shared message board identity for whoever is using this browser
+  const [displayName, setDisplayName] = useState("Family");
+
   const [input, setInput] = useState("");
 
   const [agenda, setAgenda] = useState({
     morning: ["8:00 AM Breakfast"],
     afternoon: ["2:00 PM Walk"],
-    evening: ["7:30 PM Call Family"]
+    evening: ["7:30 PM Call family"]
   });
 
+  // Shared board feed
   const [messages, setMessages] = useState([
-    { from: "Care Team", text: "Good morning. Do you want to schedule a walk today?", at: "9:10 AM" }
+    {
+      id: "m1",
+      name: "Mom",
+      text: "Good morning. Can you remind me what time the appointment is?",
+      at: "9:10 AM"
+    },
+    {
+      id: "m2",
+      name: "Ernie",
+      text: "2:00 PM walk, 3:00 PM doctor visit. I will handle the ride.",
+      at: "9:13 AM"
+    }
   ]);
 
   const [notes, setNotes] = useState([
-    { title: "Today", text: "Hydrate before the afternoon walk.", at: "8:05 AM" }
+    { id: "n1", title: "Today", text: "Hydrate before the afternoon walk.", at: "8:05 AM" }
   ]);
 
   const [todos, setTodos] = useState([
-    { text: "Refill RX reminder", done: false },
-    { text: "Call family", done: false }
+    { id: "t1", text: "Confirm transportation to doctor", done: false },
+    { id: "t2", text: "Pick up meds", done: false }
   ]);
 
-  const [files, setFiles] = useState([{ name: "Care Plan.pdf", type: "PDF", updated: "Yesterday" }]);
-  const [photos, setPhotos] = useState([{ name: "Family Photo", updated: "Last week" }]);
-  const [rx, setRx] = useState([
-    { name: "Morning meds", detail: "Taken with breakfast", status: "Planned" }
-  ]);
+  const [files, setFiles] = useState([{ id: "f1", name: "Care Plan.pdf", type: "PDF", updated: "Yesterday" }]);
+  const [photos, setPhotos] = useState([{ id: "p1", name: "Family Photo", updated: "Last week" }]);
+  const [rx, setRx] = useState([{ id: "r1", name: "Morning meds", detail: "Taken with breakfast", status: "Planned" }]);
 
   const [toast, setToast] = useState(null);
   const [showGreeting, setShowGreeting] = useState(false);
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("agewell_board_demo_state_v1");
+      const saved = localStorage.getItem("agewell_board_demo_state_board_v1");
       if (!saved) return;
       const parsed = JSON.parse(saved);
       if (parsed.active) setActive(parsed.active);
+      if (parsed.displayName) setDisplayName(parsed.displayName);
       if (parsed.agenda) setAgenda(parsed.agenda);
       if (parsed.messages) setMessages(parsed.messages);
       if (parsed.notes) setNotes(parsed.notes);
@@ -77,9 +92,10 @@ export default function Home() {
   useEffect(() => {
     try {
       localStorage.setItem(
-        "agewell_board_demo_state_v1",
+        "agewell_board_demo_state_board_v1",
         JSON.stringify({
           active,
+          displayName,
           agenda,
           messages,
           notes,
@@ -92,11 +108,11 @@ export default function Home() {
     } catch {
       /* no-op */
     }
-  }, [active, agenda, messages, notes, todos, files, photos, rx]);
+  }, [active, displayName, agenda, messages, notes, todos, files, photos, rx]);
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2200);
+    const t = setTimeout(() => setToast(null), 2000);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -104,10 +120,16 @@ export default function Home() {
     setToast(msg);
   }
 
-  function normalizeTimeText(text) {
-    const t = text.trim();
-    if (!t) return null;
-    return t;
+  function nowTime() {
+    return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+
+  function cryptoId() {
+    try {
+      return crypto.randomUUID();
+    } catch {
+      return `id_${Math.random().toString(16).slice(2)}`;
+    }
   }
 
   function detectDayPart(text) {
@@ -124,82 +146,62 @@ export default function Home() {
     return "evening";
   }
 
-  function submit() {
-    const text = normalizeTimeText(input);
-    if (!text) return;
+  function submit(textOverride) {
+    const raw = (textOverride ?? input ?? "").trim();
+    if (!raw) return;
 
     if (active === "agenda") {
-      const part = detectDayPart(text) || "morning";
-      setAgenda((prev) => ({
-        ...prev,
-        [part]: [...prev[part], text]
-      }));
+      const part = detectDayPart(raw) || "morning";
+      setAgenda((prev) => ({ ...prev, [part]: [raw, ...prev[part]] }));
       setInput("");
       showToast("Added to agenda");
       return;
     }
 
     if (active === "todo") {
-      setTodos((prev) => [{ text, done: false }, ...prev]);
+      setTodos((prev) => [{ id: cryptoId(), text: raw, done: false }, ...prev]);
       setInput("");
       showToast("Added to to do");
       return;
     }
 
     if (active === "notes") {
-      setNotes((prev) => [{ title: "Note", text, at: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) }, ...prev]);
+      setNotes((prev) => [{ id: cryptoId(), title: "Note", text: raw, at: nowTime() }, ...prev]);
       setInput("");
       showToast("Saved note");
       return;
     }
 
     if (active === "messages") {
-      setMessages((prev) => [
-        ...prev,
-        {
-          from: "You",
-          text,
-          at: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-        }
-      ]);
+      const name = (displayName || "Family").trim() || "Family";
+      setMessages((prev) => [...prev, { id: cryptoId(), name, text: raw, at: nowTime() }]);
       setInput("");
-      showToast("Message drafted");
+      showToast("Posted");
       return;
     }
 
     if (active === "files") {
-      setFiles((prev) => [{ name: text, type: "File", updated: "Just now" }, ...prev]);
+      setFiles((prev) => [{ id: cryptoId(), name: raw, type: "File", updated: "Just now" }, ...prev]);
       setInput("");
       showToast("Added file placeholder");
       return;
     }
 
     if (active === "photos") {
-      setPhotos((prev) => [{ name: text, updated: "Just now" }, ...prev]);
+      setPhotos((prev) => [{ id: cryptoId(), name: raw, updated: "Just now" }, ...prev]);
       setInput("");
       showToast("Added photo placeholder");
       return;
     }
 
     if (active === "rx") {
-      setRx((prev) => [{ name: text, detail: "Added from input", status: "Planned" }, ...prev]);
+      setRx((prev) => [{ id: cryptoId(), name: raw, detail: "Added from input", status: "Planned" }, ...prev]);
       setInput("");
       showToast("Added RX item");
       return;
     }
 
-    if (active === "calendar") {
-      showToast("Calendar is a placeholder in this demo");
-      setInput("");
-      return;
-    }
-
-    if (active === "games") {
-      showToast("Games is a placeholder in this demo");
-      setInput("");
-      return;
-    }
-
+    showToast("Placeholder module");
     setInput("");
   }
 
@@ -207,12 +209,22 @@ export default function Home() {
     if (e.key === "Enter") submit();
   }
 
+  function inputPlaceholder() {
+    if (active === "agenda") return "Add an agenda item, include a time or morning, afternoon, evening";
+    if (active === "todo") return "Add a to do item";
+    if (active === "notes") return "Write a note";
+    if (active === "messages") return "Post to the family board";
+    if (active === "files") return "Add a file name";
+    if (active === "photos") return "Add a photo label";
+    if (active === "rx") return "Add an RX item";
+    return "Type a request";
+  }
+
   const styles = {
     page: {
       minHeight: "100vh",
       background: "#ebe7f7",
-      fontFamily:
-        '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif',
+      fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif',
       color: "#1f1a2a"
     },
     topbar: {
@@ -221,7 +233,7 @@ export default function Home() {
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      padding: "0 28px 0 28px",
+      padding: "0 28px",
       boxSizing: "border-box"
     },
     brand: { display: "flex", alignItems: "center", gap: 14, color: "white" },
@@ -239,6 +251,7 @@ export default function Home() {
     brandTextWrap: { display: "flex", flexDirection: "column", lineHeight: 1.05 },
     brandTitle: { fontSize: 22, fontWeight: 800 },
     brandSubtitle: { fontSize: 12, opacity: 0.85, marginTop: 6 },
+
     topActions: { display: "flex", alignItems: "center", gap: 10 },
     pillBtn: {
       background: "rgba(255,255,255,0.16)",
@@ -249,34 +262,6 @@ export default function Home() {
       fontSize: 13,
       fontWeight: 700,
       cursor: "pointer"
-    },
-    iconBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      background: "rgba(255,255,255,0.16)",
-      border: "1px solid rgba(255,255,255,0.24)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      color: "white",
-      cursor: "pointer",
-      fontWeight: 900
-    },
-    userChip: {
-      marginLeft: 6,
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      color: "white",
-      fontSize: 13,
-      fontWeight: 800
-    },
-    userDot: {
-      width: 10,
-      height: 10,
-      borderRadius: 999,
-      background: "rgba(255,255,255,0.65)"
     },
 
     stageWrap: { padding: 26 },
@@ -333,18 +318,11 @@ export default function Home() {
       boxShadow: "0 6px 14px rgba(0,0,0,0.25)"
     }),
 
-    dateNote: {
-      padding: "18px 18px 14px 18px",
-      background: "rgba(255,255,255,0.84)"
-    },
+    dateNote: { padding: "18px 18px 14px 18px", background: "rgba(255,255,255,0.84)" },
     dateTitle: { fontSize: 24, fontWeight: 900, margin: 0, letterSpacing: 0.2 },
     dateSub: { marginTop: 4, fontSize: 14, opacity: 0.75, fontWeight: 700 },
 
-    photoFrame: {
-      marginTop: 16,
-      padding: 12,
-      background: "rgba(255,255,255,0.82)"
-    },
+    photoFrame: { marginTop: 16, padding: 12, background: "rgba(255,255,255,0.82)" },
     photoInner: {
       borderRadius: 12,
       overflow: "hidden",
@@ -358,7 +336,6 @@ export default function Home() {
     },
 
     centerStack: { display: "flex", flexDirection: "column", gap: 16 },
-
     welcomeCard: {
       borderRadius: 14,
       background: "rgba(255,255,255,0.76)",
@@ -376,15 +353,13 @@ export default function Home() {
       width: 92,
       height: 92,
       borderRadius: 18,
-      background:
-        "linear-gradient(180deg, rgba(112,74,210,0.28), rgba(112,74,210,0.10))",
+      background: "linear-gradient(180deg, rgba(112,74,210,0.28), rgba(112,74,210,0.10))",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       fontWeight: 900,
       color: "#3a2b67"
     },
-    welcomeText: { lineHeight: 1.1 },
     welcomeTitle: { margin: 0, fontSize: 20, fontWeight: 900 },
     welcomeSub: { marginTop: 8, marginBottom: 0, fontSize: 13, opacity: 0.72, fontWeight: 700 },
     playBtn: {
@@ -399,12 +374,7 @@ export default function Home() {
       boxShadow: "0 12px 24px rgba(109,74,210,0.35)"
     },
 
-    tilesGrid: {
-      display: "grid",
-      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-      gap: 12,
-      alignContent: "start"
-    },
+    tilesGrid: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 },
     tileBase: {
       height: 46,
       borderRadius: 10,
@@ -416,8 +386,7 @@ export default function Home() {
       fontWeight: 900,
       fontSize: 13,
       cursor: "pointer",
-      userSelect: "none",
-      transition: "transform 120ms ease, box-shadow 120ms ease"
+      userSelect: "none"
     },
 
     rightPanel: {
@@ -430,18 +399,24 @@ export default function Home() {
       overflow: "hidden",
       minHeight: 260
     },
-
-    rightHeaderRow: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: 10
-    },
+    rightHeaderRow: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
     rightTitle: { fontSize: 18, fontWeight: 900, margin: 0 },
-
     section: { marginTop: 14 },
     label: { fontSize: 12, fontWeight: 900, opacity: 0.72 },
     item: { marginTop: 10, fontSize: 14, fontWeight: 800, opacity: 0.9 },
+
+    nameRow: { marginTop: 10, display: "flex", gap: 10, alignItems: "center" },
+    nameInput: {
+      width: "100%",
+      height: 34,
+      borderRadius: 10,
+      border: "1px solid rgba(0,0,0,0.14)",
+      padding: "0 10px",
+      fontSize: 13,
+      fontWeight: 800,
+      background: "rgba(255,255,255,0.9)",
+      outline: "none"
+    },
 
     bottomRow: { marginTop: 20, display: "flex", gap: 12, alignItems: "center" },
     input: {
@@ -467,51 +442,6 @@ export default function Home() {
       boxShadow: "0 12px 24px rgba(109,74,210,0.35)"
     },
 
-    modalBackdrop: {
-      position: "fixed",
-      inset: 0,
-      background: "rgba(0,0,0,0.45)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      zIndex: 50
-    },
-    modal: {
-      width: "min(720px, 92vw)",
-      borderRadius: 16,
-      background: "white",
-      boxShadow: "0 30px 90px rgba(0,0,0,0.35)",
-      border: "1px solid rgba(0,0,0,0.08)",
-      overflow: "hidden"
-    },
-    modalHeader: {
-      padding: "14px 16px",
-      background: "rgba(199,189,234,0.45)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between"
-    },
-    modalTitle: { margin: 0, fontSize: 14, fontWeight: 900 },
-    modalClose: {
-      border: "1px solid rgba(0,0,0,0.10)",
-      background: "white",
-      borderRadius: 10,
-      padding: "8px 10px",
-      cursor: "pointer",
-      fontWeight: 900
-    },
-    modalBody: { padding: 16 },
-    videoPlaceholder: {
-      height: 320,
-      borderRadius: 14,
-      background: "linear-gradient(180deg, rgba(109,74,210,0.20), rgba(0,0,0,0.05))",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontWeight: 900,
-      color: "rgba(0,0,0,0.55)"
-    },
-
     toast: {
       position: "fixed",
       right: 18,
@@ -529,54 +459,23 @@ export default function Home() {
 
   function tileStyle(m) {
     const isActive = active === m.key;
-
     if (m.style === "primary") {
-      return {
-        ...styles.tileBase,
-        background: isActive ? "linear-gradient(180deg,#7f5cff,#6d4ad2)" : "rgba(255,255,255,0.78)",
-        color: isActive ? "white" : "#3a2b67"
-      };
+      return { ...styles.tileBase, background: isActive ? "linear-gradient(180deg,#7f5cff,#6d4ad2)" : "rgba(255,255,255,0.78)", color: isActive ? "white" : "#3a2b67" };
     }
-
     if (m.style === "rx") {
-      return {
-        ...styles.tileBase,
-        background: isActive ? "rgba(185,240,255,0.95)" : "rgba(185,240,255,0.85)",
-        color: "#1d3b52"
-      };
+      return { ...styles.tileBase, background: "rgba(185,240,255,0.88)", color: "#1d3b52", outline: isActive ? "2px solid rgba(0,0,0,0.18)" : "none" };
     }
-
     if (m.style === "danger") {
-      return {
-        ...styles.tileBase,
-        background: isActive ? "rgba(180,60,60,0.92)" : "rgba(180,60,60,0.85)",
-        color: "white"
-      };
+      return { ...styles.tileBase, background: "rgba(180,60,60,0.88)", color: "white", outline: isActive ? "2px solid rgba(0,0,0,0.18)" : "none" };
     }
-
-    return {
-      ...styles.tileBase,
-      background: isActive ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.78)",
-      color: "#3a2b67"
-    };
+    return { ...styles.tileBase, background: isActive ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.78)", color: "#3a2b67" };
   }
 
   function rightPanelTitle() {
     const m = modules.find((x) => x.key === active);
-    return m ? (m.key === "agenda" ? "My Agenda" : m.label) : "My Agenda";
-  }
-
-  function inputPlaceholder() {
-    if (active === "agenda") return "Add an agenda item, include a time or morning, afternoon, evening";
-    if (active === "todo") return "Add a to do item";
-    if (active === "notes") return "Write a note";
-    if (active === "messages") return "Draft a message";
-    if (active === "files") return "Add a file name";
-    if (active === "photos") return "Add a photo label";
-    if (active === "rx") return "Add an RX item";
-    if (active === "calendar") return "Calendar placeholder, type anything";
-    if (active === "games") return "Games placeholder, type anything";
-    return "Type a request";
+    if (!m) return "My Agenda";
+    if (m.key === "agenda") return "My Agenda";
+    return m.label;
   }
 
   function RightPanelBody() {
@@ -586,109 +485,19 @@ export default function Home() {
           <div style={styles.section}>
             <div style={styles.label}>Morning</div>
             {agenda.morning.map((t, idx) => (
-              <div key={`m-${idx}`} style={styles.item}>{t}</div>
+              <div key={`am-${idx}`} style={styles.item}>{t}</div>
             ))}
           </div>
           <div style={styles.section}>
             <div style={styles.label}>Afternoon</div>
             {agenda.afternoon.map((t, idx) => (
-              <div key={`a-${idx}`} style={styles.item}>{t}</div>
+              <div key={`pm-${idx}`} style={styles.item}>{t}</div>
             ))}
           </div>
           <div style={styles.section}>
             <div style={styles.label}>Evening</div>
             {agenda.evening.map((t, idx) => (
-              <div key={`e-${idx}`} style={styles.item}>{t}</div>
-            ))}
-          </div>
-        </>
-      );
-    }
-
-    if (active === "calendar") {
-      return (
-        <>
-          <div style={styles.section}>
-            <div style={styles.label}>Today</div>
-            <div style={styles.item}>No calendar integration in this demo</div>
-            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.65, fontWeight: 700 }}>
-              Next step is to wire your platform calendar connector into this panel.
-            </div>
-          </div>
-        </>
-      );
-    }
-
-    if (active === "messages") {
-      return (
-        <>
-          <div style={styles.section}>
-            <div style={styles.label}>Thread</div>
-            {messages.map((m, idx) => (
-              <div key={`msg-${idx}`} style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>
-                  {m.from} · {m.at}
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 800, opacity: 0.92, marginTop: 4 }}>
-                  {m.text}
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      );
-    }
-
-    if (active === "files") {
-      return (
-        <>
-          <div style={styles.section}>
-            <div style={styles.label}>Files</div>
-            {files.map((f, idx) => (
-              <div key={`f-${idx}`} style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 14, fontWeight: 900 }}>{f.name}</div>
-                <div style={{ fontSize: 12, opacity: 0.65, fontWeight: 800 }}>
-                  {f.type} · Updated {f.updated}
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      );
-    }
-
-    if (active === "photos") {
-      return (
-        <>
-          <div style={styles.section}>
-            <div style={styles.label}>Photos</div>
-            {photos.map((p, idx) => (
-              <div key={`p-${idx}`} style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 14, fontWeight: 900 }}>{p.name}</div>
-                <div style={{ fontSize: 12, opacity: 0.65, fontWeight: 800 }}>
-                  Updated {p.updated}
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      );
-    }
-
-    if (active === "notes") {
-      return (
-        <>
-          <div style={styles.section}>
-            <div style={styles.label}>Notes</div>
-            {notes.map((n, idx) => (
-              <div key={`n-${idx}`} style={{ marginTop: 12 }}>
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>
-                  {n.title} · {n.at}
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 800, opacity: 0.92, marginTop: 4 }}>
-                  {n.text}
-                </div>
-              </div>
+              <div key={`ev-${idx}`} style={styles.item}>{t}</div>
             ))}
           </div>
         </>
@@ -697,85 +506,140 @@ export default function Home() {
 
     if (active === "todo") {
       return (
-        <>
-          <div style={styles.section}>
-            <div style={styles.label}>To Do</div>
-            {todos.map((t, idx) => (
+        <div style={styles.section}>
+          <div style={styles.label}>To Do</div>
+          {todos.map((t) => (
+            <div
+              key={t.id}
+              style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", cursor: "pointer", userSelect: "none" }}
+              onClick={() => setTodos((prev) => prev.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)))}
+            >
               <div
-                key={`t-${idx}`}
                 style={{
-                  marginTop: 10,
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                  cursor: "pointer",
-                  userSelect: "none"
+                  width: 18,
+                  height: 18,
+                  borderRadius: 6,
+                  border: "1px solid rgba(0,0,0,0.18)",
+                  background: t.done ? "rgba(109,74,210,0.75)" : "rgba(255,255,255,0.9)"
                 }}
-                onClick={() => {
-                  setTodos((prev) =>
-                    prev.map((x, i) => (i === idx ? { ...x, done: !x.done } : x))
-                  );
+              />
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 900,
+                  opacity: t.done ? 0.55 : 0.92,
+                  textDecoration: t.done ? "line-through" : "none"
                 }}
               >
-                <div
-                  style={{
-                    width: 18,
-                    height: 18,
-                    borderRadius: 6,
-                    border: "1px solid rgba(0,0,0,0.18)",
-                    background: t.done ? "rgba(109,74,210,0.75)" : "rgba(255,255,255,0.9)"
-                  }}
-                />
-                <div
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 900,
-                    opacity: t.done ? 0.55 : 0.92,
-                    textDecoration: t.done ? "line-through" : "none"
-                  }}
-                >
-                  {t.text}
-                </div>
+                {t.text}
               </div>
-            ))}
-            <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6, fontWeight: 700 }}>
-              Click an item to mark complete.
             </div>
+          ))}
+          <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6, fontWeight: 700 }}>
+            Click an item to mark complete.
           </div>
-        </>
+        </div>
+      );
+    }
+
+    if (active === "messages") {
+      return (
+        <div style={styles.section}>
+          <div style={styles.label}>Family Message Board</div>
+
+          <div style={styles.nameRow}>
+            <input
+              style={styles.nameInput}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Your name, e.g., Mom, Ernie, Sarah"
+            />
+          </div>
+
+          {messages.map((m) => (
+            <div key={m.id} style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>
+                {m.name} · {m.at}
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 800, opacity: 0.92, marginTop: 4 }}>
+                {m.text}
+              </div>
+            </div>
+          ))}
+
+          <div style={{ marginTop: 14, fontSize: 12, opacity: 0.6, fontWeight: 700 }}>
+            Post using the bottom input. It will appear here with your name.
+          </div>
+        </div>
+      );
+    }
+
+    if (active === "notes") {
+      return (
+        <div style={styles.section}>
+          <div style={styles.label}>Notes</div>
+          {notes.map((n) => (
+            <div key={n.id} style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>{n.at}</div>
+              <div style={{ fontSize: 14, fontWeight: 800, opacity: 0.92, marginTop: 4 }}>{n.text}</div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    if (active === "files") {
+      return (
+        <div style={styles.section}>
+          <div style={styles.label}>Files</div>
+          {files.map((f) => (
+            <div key={f.id} style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 14, fontWeight: 900 }}>{f.name}</div>
+              <div style={{ fontSize: 12, opacity: 0.65, fontWeight: 800 }}>
+                {f.type} · Updated {f.updated}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    if (active === "photos") {
+      return (
+        <div style={styles.section}>
+          <div style={styles.label}>Photos</div>
+          {photos.map((p) => (
+            <div key={p.id} style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 14, fontWeight: 900 }}>{p.name}</div>
+              <div style={{ fontSize: 12, opacity: 0.65, fontWeight: 800 }}>Updated {p.updated}</div>
+            </div>
+          ))}
+        </div>
       );
     }
 
     if (active === "rx") {
       return (
-        <>
-          <div style={styles.section}>
-            <div style={styles.label}>RX</div>
-            {rx.map((r, idx) => (
-              <div key={`rx-${idx}`} style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 14, fontWeight: 900 }}>{r.name}</div>
-                <div style={{ fontSize: 12, opacity: 0.65, fontWeight: 800 }}>
-                  {r.detail} · {r.status}
-                </div>
+        <div style={styles.section}>
+          <div style={styles.label}>RX</div>
+          {rx.map((r) => (
+            <div key={r.id} style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 14, fontWeight: 900 }}>{r.name}</div>
+              <div style={{ fontSize: 12, opacity: 0.65, fontWeight: 800 }}>
+                {r.detail} · {r.status}
               </div>
-            ))}
-          </div>
-        </>
+            </div>
+          ))}
+        </div>
       );
     }
 
-    if (active === "games") {
-      return (
-        <>
-          <div style={styles.section}>
-            <div style={styles.label}>Games</div>
-            <div style={styles.item}>Placeholder</div>
-          </div>
-        </>
-      );
-    }
-
-    return null;
+    return (
+      <div style={styles.section}>
+        <div style={styles.label}>Placeholder</div>
+        <div style={styles.item}>This module is a placeholder in the demo</div>
+      </div>
+    );
   }
 
   return (
@@ -791,15 +655,7 @@ export default function Home() {
 
         <div style={styles.topActions}>
           <button style={styles.pillBtn} onClick={() => showToast("Help placeholder")}>Help</button>
-          <button style={styles.iconBtn} aria-label="Notifications" onClick={() => showToast("Notifications placeholder")}>
-            🔔
-          </button>
           <button style={styles.pillBtn} onClick={() => showToast("Block Editor placeholder")}>Block Editor</button>
-          <button style={styles.pillBtn} onClick={() => showToast("Set company placeholder")}>Set company</button>
-          <div style={styles.userChip}>
-            <span style={styles.userDot} />
-            <span>ernie</span>
-          </div>
         </div>
       </div>
 
@@ -809,17 +665,12 @@ export default function Home() {
             <div style={styles.corkNoise} />
 
             <div style={styles.boardGrid}>
-              {/* Left column */}
               <div>
                 <div style={{ ...styles.pinnedCard, marginBottom: 16 }}>
                   <div style={styles.pin("#7c5cff")} />
                   <div style={styles.dateNote}>
-                    <div style={styles.dateTitle}>
-                      {dateStr.split(",")[0].toUpperCase()}
-                    </div>
-                    <div style={styles.dateSub}>
-                      {dateStr.substring(dateStr.indexOf(",") + 2)}
-                    </div>
+                    <div style={styles.dateTitle}>{dateStr.split(",")[0].toUpperCase()}</div>
+                    <div style={styles.dateSub}>{dateStr.substring(dateStr.indexOf(",") + 2)}</div>
                   </div>
                 </div>
 
@@ -831,21 +682,14 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Center column */}
               <div style={styles.centerStack}>
                 <div style={styles.welcomeCard}>
                   <div style={styles.assistantAvatar}>AI</div>
-                  <div style={styles.welcomeText}>
+                  <div>
                     <p style={styles.welcomeTitle}>Good Morning, Anne!</p>
-                    <p style={styles.welcomeSub}>Let’s get the day started.</p>
+                    <p style={styles.welcomeSub}>Tap a tile, then use the input to add an item.</p>
                   </div>
-                  <button
-                    style={styles.playBtn}
-                    aria-label="Play greeting"
-                    onClick={() => setShowGreeting(true)}
-                  >
-                    ▶
-                  </button>
+                  <button style={styles.playBtn} onClick={() => setShowGreeting(true)}>▶</button>
                 </div>
 
                 <div style={styles.tilesGrid}>
@@ -856,18 +700,6 @@ export default function Home() {
                       onClick={() => {
                         setActive(m.key);
                         showToast(`${m.key === "agenda" ? "Agenda" : m.label} opened`);
-                      }}
-                      onMouseDown={(e) => {
-                        e.currentTarget.style.transform = "translateY(1px)";
-                        e.currentTarget.style.boxShadow = "0 8px 14px rgba(0,0,0,0.10)";
-                      }}
-                      onMouseUp={(e) => {
-                        e.currentTarget.style.transform = "translateY(0px)";
-                        e.currentTarget.style.boxShadow = "0 10px 18px rgba(0,0,0,0.10)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = "translateY(0px)";
-                        e.currentTarget.style.boxShadow = "0 10px 18px rgba(0,0,0,0.10)";
                       }}
                       role="button"
                       tabIndex={0}
@@ -889,15 +721,14 @@ export default function Home() {
                     placeholder={inputPlaceholder()}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={onKeyDown}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submit();
+                    }}
                   />
-                  <button style={styles.send} aria-label="Send" onClick={submit}>
-                    →
-                  </button>
+                  <button style={styles.send} onClick={() => submit()}>→</button>
                 </div>
               </div>
 
-              {/* Right column (dynamic panel) */}
               <div style={styles.rightPanel}>
                 <div style={styles.pin("#ff4d4d")} />
                 <div style={styles.rightHeaderRow}>
@@ -913,18 +744,67 @@ export default function Home() {
       </div>
 
       {showGreeting ? (
-        <div style={styles.modalBackdrop} onClick={() => setShowGreeting(false)}>
-          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <p style={styles.modalTitle}>Greeting Video Placeholder</p>
-              <button style={styles.modalClose} onClick={() => setShowGreeting(false)}>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50
+          }}
+          onClick={() => setShowGreeting(false)}
+        >
+          <div
+            style={{
+              width: "min(720px, 92vw)",
+              borderRadius: 16,
+              background: "white",
+              boxShadow: "0 30px 90px rgba(0,0,0,0.35)",
+              border: "1px solid rgba(0,0,0,0.08)",
+              overflow: "hidden"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                padding: "14px 16px",
+                background: "rgba(199,189,234,0.45)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between"
+              }}
+            >
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 900 }}>Greeting placeholder</p>
+              <button
+                style={{
+                  border: "1px solid rgba(0,0,0,0.10)",
+                  background: "white",
+                  borderRadius: 10,
+                  padding: "8px 10px",
+                  cursor: "pointer",
+                  fontWeight: 900
+                }}
+                onClick={() => setShowGreeting(false)}
+              >
                 Close
               </button>
             </div>
-            <div style={styles.modalBody}>
-              <div style={styles.videoPlaceholder}>Video Module Placeholder</div>
-              <div style={{ marginTop: 12, fontSize: 13, opacity: 0.7, fontWeight: 700 }}>
-                Next step is to wire this to your platform video or avatar component.
+            <div style={{ padding: 16 }}>
+              <div
+                style={{
+                  height: 320,
+                  borderRadius: 14,
+                  background: "linear-gradient(180deg, rgba(109,74,210,0.20), rgba(0,0,0,0.05))",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: 900,
+                  color: "rgba(0,0,0,0.55)"
+                }}
+              >
+                Video module placeholder
               </div>
             </div>
           </div>
