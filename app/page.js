@@ -1,3 +1,7 @@
+"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+
 export default function Home() {
   const dateStr = new Date().toLocaleDateString(undefined, {
     weekday: "long",
@@ -5,6 +9,203 @@ export default function Home() {
     day: "numeric",
     year: "numeric"
   });
+
+  const modules = useMemo(
+    () => [
+      { key: "agenda", label: "AGENDA", style: "primary" },
+      { key: "calendar", label: "Calendar", style: "neutral" },
+      { key: "messages", label: "Messages", style: "neutral" },
+      { key: "files", label: "Files", style: "neutral" },
+      { key: "photos", label: "Photos", style: "neutral" },
+      { key: "notes", label: "Notes", style: "neutral" },
+      { key: "todo", label: "To Do", style: "neutral" },
+      { key: "rx", label: "RX", style: "rx" },
+      { key: "games", label: "Games", style: "danger" }
+    ],
+    []
+  );
+
+  const [active, setActive] = useState("agenda");
+  const [input, setInput] = useState("");
+
+  const [agenda, setAgenda] = useState({
+    morning: ["8:00 AM Breakfast"],
+    afternoon: ["2:00 PM Walk"],
+    evening: ["7:30 PM Call Family"]
+  });
+
+  const [messages, setMessages] = useState([
+    { from: "Care Team", text: "Good morning. Do you want to schedule a walk today?", at: "9:10 AM" }
+  ]);
+
+  const [notes, setNotes] = useState([
+    { title: "Today", text: "Hydrate before the afternoon walk.", at: "8:05 AM" }
+  ]);
+
+  const [todos, setTodos] = useState([
+    { text: "Refill RX reminder", done: false },
+    { text: "Call family", done: false }
+  ]);
+
+  const [files, setFiles] = useState([{ name: "Care Plan.pdf", type: "PDF", updated: "Yesterday" }]);
+  const [photos, setPhotos] = useState([{ name: "Family Photo", updated: "Last week" }]);
+  const [rx, setRx] = useState([
+    { name: "Morning meds", detail: "Taken with breakfast", status: "Planned" }
+  ]);
+
+  const [toast, setToast] = useState(null);
+  const [showGreeting, setShowGreeting] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("agewell_board_demo_state_v1");
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+      if (parsed.active) setActive(parsed.active);
+      if (parsed.agenda) setAgenda(parsed.agenda);
+      if (parsed.messages) setMessages(parsed.messages);
+      if (parsed.notes) setNotes(parsed.notes);
+      if (parsed.todos) setTodos(parsed.todos);
+      if (parsed.files) setFiles(parsed.files);
+      if (parsed.photos) setPhotos(parsed.photos);
+      if (parsed.rx) setRx(parsed.rx);
+    } catch {
+      /* no-op */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "agewell_board_demo_state_v1",
+        JSON.stringify({
+          active,
+          agenda,
+          messages,
+          notes,
+          todos,
+          files,
+          photos,
+          rx
+        })
+      );
+    } catch {
+      /* no-op */
+    }
+  }, [active, agenda, messages, notes, todos, files, photos, rx]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2200);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  function showToast(msg) {
+    setToast(msg);
+  }
+
+  function normalizeTimeText(text) {
+    const t = text.trim();
+    if (!t) return null;
+    return t;
+  }
+
+  function detectDayPart(text) {
+    const s = text.toLowerCase();
+    if (s.includes("morning")) return "morning";
+    if (s.includes("afternoon")) return "afternoon";
+    if (s.includes("evening") || s.includes("night")) return "evening";
+    const timeMatch = s.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/);
+    if (!timeMatch) return null;
+    const hour = parseInt(timeMatch[1], 10);
+    const mer = timeMatch[3];
+    if (mer === "am") return "morning";
+    if (mer === "pm" && hour < 5) return "afternoon";
+    return "evening";
+  }
+
+  function submit() {
+    const text = normalizeTimeText(input);
+    if (!text) return;
+
+    if (active === "agenda") {
+      const part = detectDayPart(text) || "morning";
+      setAgenda((prev) => ({
+        ...prev,
+        [part]: [...prev[part], text]
+      }));
+      setInput("");
+      showToast("Added to agenda");
+      return;
+    }
+
+    if (active === "todo") {
+      setTodos((prev) => [{ text, done: false }, ...prev]);
+      setInput("");
+      showToast("Added to to do");
+      return;
+    }
+
+    if (active === "notes") {
+      setNotes((prev) => [{ title: "Note", text, at: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) }, ...prev]);
+      setInput("");
+      showToast("Saved note");
+      return;
+    }
+
+    if (active === "messages") {
+      setMessages((prev) => [
+        ...prev,
+        {
+          from: "You",
+          text,
+          at: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+        }
+      ]);
+      setInput("");
+      showToast("Message drafted");
+      return;
+    }
+
+    if (active === "files") {
+      setFiles((prev) => [{ name: text, type: "File", updated: "Just now" }, ...prev]);
+      setInput("");
+      showToast("Added file placeholder");
+      return;
+    }
+
+    if (active === "photos") {
+      setPhotos((prev) => [{ name: text, updated: "Just now" }, ...prev]);
+      setInput("");
+      showToast("Added photo placeholder");
+      return;
+    }
+
+    if (active === "rx") {
+      setRx((prev) => [{ name: text, detail: "Added from input", status: "Planned" }, ...prev]);
+      setInput("");
+      showToast("Added RX item");
+      return;
+    }
+
+    if (active === "calendar") {
+      showToast("Calendar is a placeholder in this demo");
+      setInput("");
+      return;
+    }
+
+    if (active === "games") {
+      showToast("Games is a placeholder in this demo");
+      setInput("");
+      return;
+    }
+
+    setInput("");
+  }
+
+  function onKeyDown(e) {
+    if (e.key === "Enter") submit();
+  }
 
   const styles = {
     page: {
@@ -38,7 +239,6 @@ export default function Home() {
     brandTextWrap: { display: "flex", flexDirection: "column", lineHeight: 1.05 },
     brandTitle: { fontSize: 22, fontWeight: 800 },
     brandSubtitle: { fontSize: 12, opacity: 0.85, marginTop: 6 },
-
     topActions: { display: "flex", alignItems: "center", gap: 10 },
     pillBtn: {
       background: "rgba(255,255,255,0.16)",
@@ -99,8 +299,7 @@ export default function Home() {
     corkNoise: {
       position: "absolute",
       inset: 0,
-      backgroundImage:
-        "radial-gradient(rgba(0,0,0,0.06) 1px, transparent 1px)",
+      backgroundImage: "radial-gradient(rgba(0,0,0,0.06) 1px, transparent 1px)",
       backgroundSize: "6px 6px",
       opacity: 0.25,
       pointerEvents: "none"
@@ -206,10 +405,9 @@ export default function Home() {
       gap: 12,
       alignContent: "start"
     },
-    tile: (bg, accent) => ({
+    tileBase: {
       height: 46,
       borderRadius: 10,
-      background: bg,
       border: "1px solid rgba(0,0,0,0.08)",
       boxShadow: "0 10px 18px rgba(0,0,0,0.10)",
       display: "flex",
@@ -217,10 +415,10 @@ export default function Home() {
       justifyContent: "center",
       fontWeight: 900,
       fontSize: 13,
-      color: accent,
       cursor: "pointer",
-      userSelect: "none"
-    }),
+      userSelect: "none",
+      transition: "transform 120ms ease, box-shadow 120ms ease"
+    },
 
     rightPanel: {
       borderRadius: 14,
@@ -229,8 +427,10 @@ export default function Home() {
       boxShadow: "0 14px 30px rgba(0,0,0,0.14)",
       padding: 16,
       position: "relative",
-      overflow: "hidden"
+      overflow: "hidden",
+      minHeight: 260
     },
+
     rightHeaderRow: {
       display: "flex",
       alignItems: "center",
@@ -238,9 +438,10 @@ export default function Home() {
       marginBottom: 10
     },
     rightTitle: { fontSize: 18, fontWeight: 900, margin: 0 },
-    agendaSection: { marginTop: 14 },
-    agendaLabel: { fontSize: 12, fontWeight: 900, opacity: 0.72 },
-    agendaItem: { marginTop: 10, fontSize: 14, fontWeight: 800, opacity: 0.9 },
+
+    section: { marginTop: 14 },
+    label: { fontSize: 12, fontWeight: 900, opacity: 0.72 },
+    item: { marginTop: 10, fontSize: 14, fontWeight: 800, opacity: 0.9 },
 
     bottomRow: { marginTop: 20, display: "flex", gap: 12, alignItems: "center" },
     input: {
@@ -266,13 +467,316 @@ export default function Home() {
       boxShadow: "0 12px 24px rgba(109,74,210,0.35)"
     },
 
-    responsiveHint: {
-      marginTop: 14,
-      fontSize: 12,
-      opacity: 0.55,
-      fontWeight: 700
+    modalBackdrop: {
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 50
+    },
+    modal: {
+      width: "min(720px, 92vw)",
+      borderRadius: 16,
+      background: "white",
+      boxShadow: "0 30px 90px rgba(0,0,0,0.35)",
+      border: "1px solid rgba(0,0,0,0.08)",
+      overflow: "hidden"
+    },
+    modalHeader: {
+      padding: "14px 16px",
+      background: "rgba(199,189,234,0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between"
+    },
+    modalTitle: { margin: 0, fontSize: 14, fontWeight: 900 },
+    modalClose: {
+      border: "1px solid rgba(0,0,0,0.10)",
+      background: "white",
+      borderRadius: 10,
+      padding: "8px 10px",
+      cursor: "pointer",
+      fontWeight: 900
+    },
+    modalBody: { padding: 16 },
+    videoPlaceholder: {
+      height: 320,
+      borderRadius: 14,
+      background: "linear-gradient(180deg, rgba(109,74,210,0.20), rgba(0,0,0,0.05))",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontWeight: 900,
+      color: "rgba(0,0,0,0.55)"
+    },
+
+    toast: {
+      position: "fixed",
+      right: 18,
+      bottom: 18,
+      padding: "10px 12px",
+      borderRadius: 12,
+      background: "rgba(20,14,35,0.92)",
+      color: "white",
+      fontSize: 13,
+      fontWeight: 800,
+      boxShadow: "0 18px 50px rgba(0,0,0,0.25)",
+      zIndex: 60
     }
   };
+
+  function tileStyle(m) {
+    const isActive = active === m.key;
+
+    if (m.style === "primary") {
+      return {
+        ...styles.tileBase,
+        background: isActive ? "linear-gradient(180deg,#7f5cff,#6d4ad2)" : "rgba(255,255,255,0.78)",
+        color: isActive ? "white" : "#3a2b67"
+      };
+    }
+
+    if (m.style === "rx") {
+      return {
+        ...styles.tileBase,
+        background: isActive ? "rgba(185,240,255,0.95)" : "rgba(185,240,255,0.85)",
+        color: "#1d3b52"
+      };
+    }
+
+    if (m.style === "danger") {
+      return {
+        ...styles.tileBase,
+        background: isActive ? "rgba(180,60,60,0.92)" : "rgba(180,60,60,0.85)",
+        color: "white"
+      };
+    }
+
+    return {
+      ...styles.tileBase,
+      background: isActive ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.78)",
+      color: "#3a2b67"
+    };
+  }
+
+  function rightPanelTitle() {
+    const m = modules.find((x) => x.key === active);
+    return m ? (m.key === "agenda" ? "My Agenda" : m.label) : "My Agenda";
+  }
+
+  function inputPlaceholder() {
+    if (active === "agenda") return "Add an agenda item, include a time or morning, afternoon, evening";
+    if (active === "todo") return "Add a to do item";
+    if (active === "notes") return "Write a note";
+    if (active === "messages") return "Draft a message";
+    if (active === "files") return "Add a file name";
+    if (active === "photos") return "Add a photo label";
+    if (active === "rx") return "Add an RX item";
+    if (active === "calendar") return "Calendar placeholder, type anything";
+    if (active === "games") return "Games placeholder, type anything";
+    return "Type a request";
+  }
+
+  function RightPanelBody() {
+    if (active === "agenda") {
+      return (
+        <>
+          <div style={styles.section}>
+            <div style={styles.label}>Morning</div>
+            {agenda.morning.map((t, idx) => (
+              <div key={`m-${idx}`} style={styles.item}>{t}</div>
+            ))}
+          </div>
+          <div style={styles.section}>
+            <div style={styles.label}>Afternoon</div>
+            {agenda.afternoon.map((t, idx) => (
+              <div key={`a-${idx}`} style={styles.item}>{t}</div>
+            ))}
+          </div>
+          <div style={styles.section}>
+            <div style={styles.label}>Evening</div>
+            {agenda.evening.map((t, idx) => (
+              <div key={`e-${idx}`} style={styles.item}>{t}</div>
+            ))}
+          </div>
+        </>
+      );
+    }
+
+    if (active === "calendar") {
+      return (
+        <>
+          <div style={styles.section}>
+            <div style={styles.label}>Today</div>
+            <div style={styles.item}>No calendar integration in this demo</div>
+            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.65, fontWeight: 700 }}>
+              Next step is to wire your platform calendar connector into this panel.
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    if (active === "messages") {
+      return (
+        <>
+          <div style={styles.section}>
+            <div style={styles.label}>Thread</div>
+            {messages.map((m, idx) => (
+              <div key={`msg-${idx}`} style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>
+                  {m.from} · {m.at}
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 800, opacity: 0.92, marginTop: 4 }}>
+                  {m.text}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      );
+    }
+
+    if (active === "files") {
+      return (
+        <>
+          <div style={styles.section}>
+            <div style={styles.label}>Files</div>
+            {files.map((f, idx) => (
+              <div key={`f-${idx}`} style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 14, fontWeight: 900 }}>{f.name}</div>
+                <div style={{ fontSize: 12, opacity: 0.65, fontWeight: 800 }}>
+                  {f.type} · Updated {f.updated}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      );
+    }
+
+    if (active === "photos") {
+      return (
+        <>
+          <div style={styles.section}>
+            <div style={styles.label}>Photos</div>
+            {photos.map((p, idx) => (
+              <div key={`p-${idx}`} style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 14, fontWeight: 900 }}>{p.name}</div>
+                <div style={{ fontSize: 12, opacity: 0.65, fontWeight: 800 }}>
+                  Updated {p.updated}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      );
+    }
+
+    if (active === "notes") {
+      return (
+        <>
+          <div style={styles.section}>
+            <div style={styles.label}>Notes</div>
+            {notes.map((n, idx) => (
+              <div key={`n-${idx}`} style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>
+                  {n.title} · {n.at}
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 800, opacity: 0.92, marginTop: 4 }}>
+                  {n.text}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      );
+    }
+
+    if (active === "todo") {
+      return (
+        <>
+          <div style={styles.section}>
+            <div style={styles.label}>To Do</div>
+            {todos.map((t, idx) => (
+              <div
+                key={`t-${idx}`}
+                style={{
+                  marginTop: 10,
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "center",
+                  cursor: "pointer",
+                  userSelect: "none"
+                }}
+                onClick={() => {
+                  setTodos((prev) =>
+                    prev.map((x, i) => (i === idx ? { ...x, done: !x.done } : x))
+                  );
+                }}
+              >
+                <div
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: 6,
+                    border: "1px solid rgba(0,0,0,0.18)",
+                    background: t.done ? "rgba(109,74,210,0.75)" : "rgba(255,255,255,0.9)"
+                  }}
+                />
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 900,
+                    opacity: t.done ? 0.55 : 0.92,
+                    textDecoration: t.done ? "line-through" : "none"
+                  }}
+                >
+                  {t.text}
+                </div>
+              </div>
+            ))}
+            <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6, fontWeight: 700 }}>
+              Click an item to mark complete.
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    if (active === "rx") {
+      return (
+        <>
+          <div style={styles.section}>
+            <div style={styles.label}>RX</div>
+            {rx.map((r, idx) => (
+              <div key={`rx-${idx}`} style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 14, fontWeight: 900 }}>{r.name}</div>
+                <div style={{ fontSize: 12, opacity: 0.65, fontWeight: 800 }}>
+                  {r.detail} · {r.status}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      );
+    }
+
+    if (active === "games") {
+      return (
+        <>
+          <div style={styles.section}>
+            <div style={styles.label}>Games</div>
+            <div style={styles.item}>Placeholder</div>
+          </div>
+        </>
+      );
+    }
+
+    return null;
+  }
 
   return (
     <div style={styles.page}>
@@ -286,10 +790,12 @@ export default function Home() {
         </div>
 
         <div style={styles.topActions}>
-          <button style={styles.pillBtn}>Help</button>
-          <button style={styles.iconBtn} aria-label="Notifications">🔔</button>
-          <button style={styles.pillBtn}>Block Editor</button>
-          <button style={styles.pillBtn}>Set company</button>
+          <button style={styles.pillBtn} onClick={() => showToast("Help placeholder")}>Help</button>
+          <button style={styles.iconBtn} aria-label="Notifications" onClick={() => showToast("Notifications placeholder")}>
+            🔔
+          </button>
+          <button style={styles.pillBtn} onClick={() => showToast("Block Editor placeholder")}>Block Editor</button>
+          <button style={styles.pillBtn} onClick={() => showToast("Set company placeholder")}>Set company</button>
           <div style={styles.userChip}>
             <span style={styles.userDot} />
             <span>ernie</span>
@@ -320,7 +826,6 @@ export default function Home() {
                 <div style={styles.pinnedCard}>
                   <div style={styles.pin("#5ad18c")} />
                   <div style={styles.photoFrame}>
-                    {/* Replace this with a real image later */}
                     <div style={styles.photoInner}>Photo</div>
                   </div>
                 </div>
@@ -334,69 +839,99 @@ export default function Home() {
                     <p style={styles.welcomeTitle}>Good Morning, Anne!</p>
                     <p style={styles.welcomeSub}>Let’s get the day started.</p>
                   </div>
-                  <button style={styles.playBtn} aria-label="Play greeting">
+                  <button
+                    style={styles.playBtn}
+                    aria-label="Play greeting"
+                    onClick={() => setShowGreeting(true)}
+                  >
                     ▶
                   </button>
                 </div>
 
                 <div style={styles.tilesGrid}>
-                  <div style={styles.tile("linear-gradient(180deg,#7f5cff,#6d4ad2)", "white")}>AGENDA</div>
-                  <div style={styles.tile("rgba(255,255,255,0.78)", "#3a2b67")}>Calendar</div>
-                  <div style={styles.tile("rgba(255,255,255,0.78)", "#3a2b67")}>Messages</div>
-
-                  <div style={styles.tile("rgba(255,255,255,0.78)", "#3a2b67")}>Files</div>
-                  <div style={styles.tile("rgba(255,255,255,0.78)", "#3a2b67")}>Photos</div>
-                  <div style={styles.tile("rgba(255,255,255,0.78)", "#3a2b67")}>Notes</div>
-
-                  <div style={styles.tile("rgba(255,255,255,0.78)", "#3a2b67")}>To Do</div>
-                  <div style={styles.tile("rgba(185,240,255,0.85)", "#1d3b52")}>RX</div>
-                  <div style={styles.tile("rgba(180,60,60,0.85)", "white")}>Games</div>
+                  {modules.map((m) => (
+                    <div
+                      key={m.key}
+                      style={tileStyle(m)}
+                      onClick={() => {
+                        setActive(m.key);
+                        showToast(`${m.key === "agenda" ? "Agenda" : m.label} opened`);
+                      }}
+                      onMouseDown={(e) => {
+                        e.currentTarget.style.transform = "translateY(1px)";
+                        e.currentTarget.style.boxShadow = "0 8px 14px rgba(0,0,0,0.10)";
+                      }}
+                      onMouseUp={(e) => {
+                        e.currentTarget.style.transform = "translateY(0px)";
+                        e.currentTarget.style.boxShadow = "0 10px 18px rgba(0,0,0,0.10)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = "translateY(0px)";
+                        e.currentTarget.style.boxShadow = "0 10px 18px rgba(0,0,0,0.10)";
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          setActive(m.key);
+                          showToast(`${m.key === "agenda" ? "Agenda" : m.label} opened`);
+                        }
+                      }}
+                    >
+                      {m.label}
+                    </div>
+                  ))}
                 </div>
 
                 <div style={styles.bottomRow}>
                   <input
                     style={styles.input}
-                    placeholder="Type a request, add a task, or open an item"
+                    placeholder={inputPlaceholder()}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={onKeyDown}
                   />
-                  <button style={styles.send} aria-label="Send">
+                  <button style={styles.send} aria-label="Send" onClick={submit}>
                     →
                   </button>
                 </div>
-
-                <div style={styles.responsiveHint}>
-                  Tip: replace the Photo placeholder with a resident or family image, and swap the AI card for your video module.
-                </div>
               </div>
 
-              {/* Right column */}
+              {/* Right column (dynamic panel) */}
               <div style={styles.rightPanel}>
                 <div style={styles.pin("#ff4d4d")} />
-
                 <div style={styles.rightHeaderRow}>
-                  <p style={styles.rightTitle}>My Agenda</p>
+                  <p style={styles.rightTitle}>{rightPanelTitle()}</p>
                   <div style={{ opacity: 0.65, fontWeight: 900, fontSize: 12 }}>Today</div>
                 </div>
 
-                <div style={styles.agendaSection}>
-                  <div style={styles.agendaLabel}>☕ Morning</div>
-                  <div style={styles.agendaItem}>8:00 AM Breakfast</div>
-                </div>
-
-                <div style={styles.agendaSection}>
-                  <div style={styles.agendaLabel}>🌻 Afternoon</div>
-                  <div style={styles.agendaItem}>2:00 PM Walk</div>
-                </div>
-
-                <div style={styles.agendaSection}>
-                  <div style={styles.agendaLabel}>🌙 Evening</div>
-                  <div style={styles.agendaItem}>7:30 PM Call Family</div>
-                </div>
+                <RightPanelBody />
               </div>
             </div>
-            {/* end grid */}
           </div>
         </div>
       </div>
+
+      {showGreeting ? (
+        <div style={styles.modalBackdrop} onClick={() => setShowGreeting(false)}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <p style={styles.modalTitle}>Greeting Video Placeholder</p>
+              <button style={styles.modalClose} onClick={() => setShowGreeting(false)}>
+                Close
+              </button>
+            </div>
+            <div style={styles.modalBody}>
+              <div style={styles.videoPlaceholder}>Video Module Placeholder</div>
+              <div style={{ marginTop: 12, fontSize: 13, opacity: 0.7, fontWeight: 700 }}>
+                Next step is to wire this to your platform video or avatar component.
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {toast ? <div style={styles.toast}>{toast}</div> : null}
     </div>
   );
 }
