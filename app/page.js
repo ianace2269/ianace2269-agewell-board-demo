@@ -38,17 +38,14 @@ export default function Home() {
     { id: "m1", name: "Mom", text: "Can you remind me what time the appointment is?", at: "9:10 AM" }
   ]);
 
-  const [notes, setNotes] = useState([
-    { id: "n1", at: "8:05 AM", text: "Hydrate before the afternoon walk." }
-  ]);
+  const [notes, setNotes] = useState([{ id: "n1", at: "8:05 AM", text: "Hydrate before the afternoon walk." }]);
 
-  const [todos, setTodos] = useState([
-    { id: "t1", text: "Confirm transportation to doctor", done: false }
-  ]);
+  const [todos, setTodos] = useState([{ id: "t1", text: "Confirm transportation to doctor", done: false }]);
 
   // Demo only: in-memory photo objects
   // { id, name, url }
   const [photoItems, setPhotoItems] = useState([]);
+  const [featuredPhotoUrl, setFeaturedPhotoUrl] = useState(null);
 
   const photoInputRef = useRef(null);
 
@@ -131,7 +128,6 @@ export default function Home() {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    // Create object URLs for instant preview
     const newItems = files.map((file) => ({
       id: cryptoId(),
       name: file.name || "photo",
@@ -140,7 +136,9 @@ export default function Home() {
 
     setPhotoItems((prev) => [...newItems, ...prev]);
 
-    // Reset input so selecting the same photo twice still triggers change
+    // For demo: make the first newly-added image the featured image immediately
+    setFeaturedPhotoUrl(newItems[0].url);
+
     e.target.value = "";
   }
 
@@ -148,7 +146,16 @@ export default function Home() {
     setPhotoItems((prev) => {
       const item = prev.find((p) => p.id === id);
       if (item?.url) URL.revokeObjectURL(item.url);
-      return prev.filter((p) => p.id !== id);
+
+      const next = prev.filter((p) => p.id !== id);
+
+      setFeaturedPhotoUrl((current) => {
+        if (!current) return null;
+        if (item?.url && current === item.url) return next[0]?.url || null;
+        return current;
+      });
+
+      return next;
     });
   }
 
@@ -357,9 +364,16 @@ export default function Home() {
       border: "1px solid rgba(0,0,0,0.10)",
       background: "rgba(255,255,255,0.9)",
       boxShadow: "0 10px 18px rgba(0,0,0,0.10)",
-      position: "relative"
+      position: "relative",
+      cursor: "pointer"
     },
-    thumbImg: { width: "100%", height: 140, objectFit: "cover", display: "block" },
+    thumbImg: {
+      width: "100%",
+      height: 180,
+      objectFit: "contain",
+      display: "block",
+      background: "rgba(0,0,0,0.06)"
+    },
     thumbCaption: { padding: "8px 10px", fontSize: 12, fontWeight: 900, opacity: 0.8 },
     thumbX: {
       position: "absolute",
@@ -411,19 +425,25 @@ export default function Home() {
           <div style={styles.section}>
             <div style={styles.label}>Morning</div>
             {agenda.morning.map((t, idx) => (
-              <div key={`am-${idx}`} style={styles.item}>{t}</div>
+              <div key={`am-${idx}`} style={styles.item}>
+                {t}
+              </div>
             ))}
           </div>
           <div style={styles.section}>
             <div style={styles.label}>Afternoon</div>
             {agenda.afternoon.map((t, idx) => (
-              <div key={`pm-${idx}`} style={styles.item}>{t}</div>
+              <div key={`pm-${idx}`} style={styles.item}>
+                {t}
+              </div>
             ))}
           </div>
           <div style={styles.section}>
             <div style={styles.label}>Evening</div>
             {agenda.evening.map((t, idx) => (
-              <div key={`ev-${idx}`} style={styles.item}>{t}</div>
+              <div key={`ev-${idx}`} style={styles.item}>
+                {t}
+              </div>
             ))}
           </div>
         </>
@@ -474,9 +494,7 @@ export default function Home() {
               <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>
                 {m.name} · {m.at}
               </div>
-              <div style={{ fontSize: 14, fontWeight: 800, opacity: 0.92, marginTop: 4 }}>
-                {m.text}
-              </div>
+              <div style={{ fontSize: 14, fontWeight: 800, opacity: 0.92, marginTop: 4 }}>{m.text}</div>
             </div>
           ))}
         </div>
@@ -488,18 +506,32 @@ export default function Home() {
         <div style={styles.section}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
             <div style={styles.label}>Photos</div>
-            <button style={styles.addBtn} onClick={openPhotoPicker}>Add Photos</button>
+            <button style={styles.addBtn} onClick={openPhotoPicker}>
+              Add Photos
+            </button>
           </div>
 
           {photoItems.length === 0 ? (
-            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.65, fontWeight: 800 }}>
-              Tap Add Photos to pick images from iPhone.
-            </div>
+            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.65, fontWeight: 800 }}>Tap Add Photos to pick images.</div>
           ) : (
             <div style={styles.thumbsGrid}>
               {photoItems.map((p) => (
-                <div key={p.id} style={styles.thumb}>
-                  <button style={styles.thumbX} onClick={() => removePhoto(p.id)}>×</button>
+                <div
+                  key={p.id}
+                  style={styles.thumb}
+                  onClick={() => setFeaturedPhotoUrl(p.url)}
+                  title="Click to show on the left photo card"
+                >
+                  <button
+                    style={styles.thumbX}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      removePhoto(p.id);
+                    }}
+                    aria-label="Remove photo"
+                  >
+                    ×
+                  </button>
                   <img src={p.url} alt={p.name} style={styles.thumbImg} />
                   <div style={styles.thumbCaption}>{p.name}</div>
                 </div>
@@ -507,14 +539,7 @@ export default function Home() {
             </div>
           )}
 
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            style={{ display: "none" }}
-            onChange={onPhotosSelected}
-          />
+          <input ref={photoInputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onPhotosSelected} />
         </div>
       );
     }
@@ -569,7 +594,23 @@ export default function Home() {
                 <div style={styles.pinnedCard}>
                   <div style={styles.pin("#5ad18c")} />
                   <div style={styles.photoFrame}>
-                    <div style={styles.photoInner}>Photo</div>
+                    <div style={styles.photoInner}>
+                      {featuredPhotoUrl ? (
+                        <img
+                          src={featuredPhotoUrl}
+                          alt="Featured"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                            display: "block",
+                            background: "rgba(0,0,0,0.06)"
+                          }}
+                        />
+                      ) : (
+                        "Photo"
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -581,7 +622,9 @@ export default function Home() {
                     <p style={styles.welcomeTitle}>Good Morning, Anne!</p>
                     <p style={styles.welcomeSub}>Tap a tile, then use the input to add an item.</p>
                   </div>
-                  <button style={styles.playBtn} aria-label="Play greeting">▶</button>
+                  <button style={styles.playBtn} aria-label="Play greeting">
+                    ▶
+                  </button>
                 </div>
 
                 <div style={styles.tilesGrid}>
@@ -609,7 +652,9 @@ export default function Home() {
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={onKeyDown}
                   />
-                  <button style={styles.send} onClick={submit}>→</button>
+                  <button style={styles.send} onClick={submit}>
+                    →
+                  </button>
                 </div>
               </div>
 
